@@ -1,8 +1,7 @@
 #!/bin/bash
 set -e
 
-# Préparation du compte guest pour AgOS
-# À exécuter dans le chroot du système live-build
+# Configuration du compte guest pour AgOS
 
 if id "guest" >/dev/null 2>&1; then
   echo "L’utilisateur guest existe déjà."
@@ -16,7 +15,6 @@ usermod -aG sudo guest
 mkdir -p /home/guest/Desktop /home/guest/Documents /home/guest/Downloads /home/guest/Pictures
 chown -R guest:guest /home/guest
 
-# Mot de passe root (à ajuster selon le besoin du projet)
 printf 'root:root\n' | chpasswd
 
 echo "Utilisateur guest prêt."

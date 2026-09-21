@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#020817"/>
+      <stop offset="35%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <circle cx="1420" cy="270" r="220" fill="none" stroke="url(#accent)" stroke-width="18" opacity="0.7"/>
+  <circle cx="1420" cy="270" r="120" fill="none" stroke="url(#accent)" stroke-width="12" opacity="0.8"/>
+  <circle cx="520" cy="760" r="300" fill="none" stroke="#1d4ed8" stroke-width="12" opacity="0.35"/>
+  <path d="M420 690 L760 910 L1210 330" fill="none" stroke="url(#accent)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  <text x="160" y="180" fill="#e2e8f0" font-family="DejaVu Sans, Arial, sans-serif" font-size="120" font-weight="700">AgOS</text>
+  <text x="165" y="300" fill="#94a3b8" font-family="DejaVu Sans, Arial, sans-serif" font-size="46">Debian custom desktop</text>
+</svg>

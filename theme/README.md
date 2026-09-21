@@ -1,26 +1,16 @@
 # AgOS
 
-AgOS est en cours de développement comme distribution Linux personnalisée basée sur Debian.
+AgOS est une base de distribution Linux personnalisée pour Debian.
 
-## Ce que contient le projet
+## Ce que contient ce dossier
 
-- scaffold de build live-build
-- support Debian stable
-- environnement XFCE de base
-- utilisateur guest par défaut
-- configuration LightDM
-- fichiers personnalisés de thème / session / home
-
-## Utilisation
-
-```bash
-sudo ./build.sh amd64
-```
+- éléments visuels de base pour le thème AgOS
+- logo vectoriel SVG
+- support de personnalisation de l’interface
 
 ## À venir
 
-- image ARM64
-- splash screen AgOS
-- personnalisation avancée du thème
-- scripts d’installation automatique
-- support matériel plus large
+- thème complet du bureau
+- fond d’écran final
+- splash screen de démarrage
+- logo de session et documentation visuelle

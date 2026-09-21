@@ -10,5 +10,4 @@ alias l='ls -CF'
 alias grep='grep --color=auto'
 alias ..='cd ..'
 
-# Ce message s'affiche lors de l’ouverture du terminal
 neofetch 2>/dev/null || true
