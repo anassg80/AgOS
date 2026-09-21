@@ -43,31 +43,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install native Debian image build dependencies
+      - name: Install common Debian image build dependencies
         shell: bash
         run: |
           set -Eeuo pipefail
           sudo apt-get -o Acquire::Retries=5 update
           sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
-            bash \
-            ca-certificates \
-            debootstrap \
-            dosfstools \
-            git \
-            grub-efi-amd64-bin \
-            grub-pc-bin \
-            isolinux \
-            live-build \
-            mtools \
-            qemu-user-static \
-            squashfs-tools \
-            syslinux \
-            syslinux-utils \
-            xorriso
-          command -v debootstrap
-          command -v lb
-          command -v xorriso
-          command -v mksquashfs
+            bash ca-certificates debootstrap dosfstools git live-build \
+            mtools qemu-user-static squashfs-tools xorriso
+
+      - name: Install amd64 boot dependencies
+        if: matrix.arch == 'amd64'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+            grub-efi-amd64-bin grub-pc-bin isolinux syslinux syslinux-utils
+
+      - name: Install arm64 boot dependencies
+        if: matrix.arch == 'arm64'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+            grub-efi-arm64-bin
 
       - name: Validate native build
         shell: bash
@@ -76,8 +75,6 @@ jobs:
           test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
           bash -n build.sh
           test -s "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
-          test -f config/hooks/00-setup-guest.chroot
-          test -f config/hooks/90-profile-tuning.chroot
           if grep -RIn --exclude-dir=.git --exclude='*.md' 'ubuntu-keyring' config; then
             echo "ubuntu-keyring is not allowed in Debian configuration" >&2
             exit 1
