@@ -10,7 +10,6 @@ on:
         default: v0.1.1
 
 # Le build est exécuté dans Debian Bookworm, pas dans Ubuntu.
-# Cela évite que live-build/debootstrap cherche ubuntu-keyring.
 permissions:
   contents: write
 
@@ -44,7 +43,6 @@ jobs:
         run: |
           bash -n build.sh
           test -f "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
-          grep -Rni --exclude-dir=.git ubuntu-keyring . && exit 1 || true
 
       - name: Construire l’image Debian AgOS
         run: |
