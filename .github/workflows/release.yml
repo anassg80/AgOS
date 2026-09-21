@@ -4,13 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v0.1.4"
+        description: "Release tag, for example v0.1.5"
         required: true
         type: string
-        default: v0.1.4
+        default: v0.1.5
   push:
     tags:
       - "v*"
+
+permissions:
+  contents: read
 
 env:
   DEBIAN_FRONTEND: noninteractive
@@ -20,16 +23,18 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.profile }}-${{ matrix.arch }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          - amd64
-          - arm64
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
         profile:
           - lite
           - full
@@ -38,48 +43,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Enable ARM64 emulation
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Install complete Debian image build toolchain
+      - name: Install Debian image build dependencies
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            bash \
-            ca-certificates \
-            curl \
-            debootstrap \
-            dosfstools \
-            git \
-            grub-efi-amd64-bin \
-            grub-pc-bin \
-            isolinux \
-            live-build \
-            mtools \
-            qemu-user-static \
-            binfmt-support \
-            squashfs-tools \
-            syslinux \
-            syslinux-utils \
-            xorriso
-          sudo update-binfmts --enable || true
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+            bash ca-certificates curl debootstrap dosfstools git \
+            grub-efi-amd64-bin grub-pc-bin isolinux live-build mtools \
+            squashfs-tools syslinux syslinux-utils xorriso
           command -v debootstrap
           command -v lb
           command -v xorriso
           command -v mksquashfs
-          test -x /usr/bin/qemu-aarch64-static
 
-      - name: Validate source configuration
+      - name: Validate native architecture and source
         shell: bash
         run: |
           set -Eeuo pipefail
+          test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
           bash -n build.sh
-          test -f "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
           test -s "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
           test -f config/hooks/00-setup-guest.chroot
           test -f config/hooks/90-profile-tuning.chroot
@@ -97,9 +80,7 @@ jobs:
           set -Eeuo pipefail
           image="dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
           checksum="${image}.sha256"
-          test -f "$image"
           test -s "$image"
-          test -f "$checksum"
           test -s "$checksum"
           (cd dist && sha256sum -c "$(basename "$checksum")")
 
@@ -118,7 +99,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-
     steps:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -131,26 +111,15 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          find release-assets -maxdepth 1 -type f -print
           test "$(find release-assets -maxdepth 1 -type f -name '*.iso' | wc -l)" -eq 4
           test "$(find release-assets -maxdepth 1 -type f -name '*.iso.sha256' | wc -l)" -eq 4
 
-      - name: Create release and upload ISO files
+      - name: Create release and upload files
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: AgOS ${{ inputs.tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          draft: false
-          prerelease: false
           generate_release_notes: true
-          files: |
-            release-assets/AgOS-lite-amd64.iso
-            release-assets/AgOS-lite-amd64.iso.sha256
-            release-assets/AgOS-full-amd64.iso
-            release-assets/AgOS-full-amd64.iso.sha256
-            release-assets/AgOS-lite-arm64.iso
-            release-assets/AgOS-lite-arm64.iso.sha256
-            release-assets/AgOS-full-arm64.iso
-            release-assets/AgOS-full-arm64.iso.sha256
+          files: release-assets/*

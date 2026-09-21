@@ -9,25 +9,25 @@ PROFILE="${2:-full}"
 [[ $EUID -eq 0 ]] || { echo "Utilise: sudo ./build.sh $ARCH $PROFILE" >&2; exit 1; }
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y live-build debootstrap squashfs-tools xorriso syslinux syslinux-utils isolinux grub-pc-bin grub-efi-amd64-bin dosfstools mtools ca-certificates curl git qemu-user-static binfmt-support
-
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK_DIR="$ROOT_DIR/build/${ARCH}-${PROFILE}"
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 
+command -v lb >/dev/null
+command -v debootstrap >/dev/null
+command -v xorriso >/dev/null
+command -v mksquashfs >/dev/null
+
+NATIVE_ARCH="$(dpkg --print-architecture)"
+[[ "$NATIVE_ARCH" == "$ARCH" ]] || {
+  echo "Le build doit être natif: runner=$NATIVE_ARCH, cible=$ARCH" >&2
+  exit 1
+}
+
 BINARY_IMAGES="iso-hybrid"
-LB_EXTRA=()
-if [[ "$ARCH" == "arm64" ]]; then
-  # ARM64 est une architecture étrangère au runner amd64. Ces options
-  # permettent à debootstrap d’exécuter les étapes chroot via QEMU.
-  BINARY_IMAGES="iso"
-  QEMU_STATIC="/usr/bin/qemu-aarch64-static"
-  [[ -x "$QEMU_STATIC" ]] || { echo "qemu-aarch64-static introuvable" >&2; exit 1; }
-  LB_EXTRA+=(--bootstrap-qemu-arch arm64 --bootstrap-qemu-static "$QEMU_STATIC")
-fi
+[[ "$ARCH" == "arm64" ]] && BINARY_IMAGES="iso"
 
 lb config \
   --distribution bookworm \
@@ -35,13 +35,13 @@ lb config \
   --architectures "$ARCH" \
   --debian-installer live \
   --archive-areas "main contrib non-free non-free-firmware" \
+  --keyring-packages debian-archive-keyring \
   --mirror-bootstrap "https://deb.debian.org/debian" \
   --mirror-binary "https://deb.debian.org/debian" \
   --mirror-chroot "https://deb.debian.org/debian" \
   --mirror-chroot-security "https://deb.debian.org/debian-security" \
   --mirror-binary-security "https://deb.debian.org/debian-security" \
-  --bootappend-live "boot=live components username=guest locales=fr_FR.UTF-8,en_US.UTF-8" \
-  "${LB_EXTRA[@]}"
+  --bootappend-live "boot=live components username=guest locales=fr_FR.UTF-8,en_US.UTF-8"
 
 mkdir -p config
 cp -a "$ROOT_DIR/config/." config/
@@ -52,6 +52,7 @@ printf '%s\n' "$PROFILE" > config/includes.chroot/etc/agos-profile
 printf '%s\n' "$ARCH" > config/includes.chroot/etc/agos-architecture
 
 lb build
+
 mkdir -p "$ROOT_DIR/dist"
 OUTPUT="$(find . -maxdepth 1 -type f \( -name '*.iso' -o -name '*.img' \) -print -quit)"
 [[ -n "$OUTPUT" ]] || { echo "Aucune image produite pour $ARCH/$PROFILE" >&2; exit 1; }
