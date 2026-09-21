@@ -1,31 +1,3 @@
-task-xfce-desktop
-lightdm
-network-manager
-network-manager-gnome
-wireless-tools
-wpasupplicant
-xfce4
-xfce4-goodies
-firefox-esr
-vim
-curl
-wget
-git
-htop
-neofetch
-sudo
-build-essential
-fonts-dejavu-core
-fonts-noto-core
-pulseaudio
-pavucontrol
-alsa-utils
-blueman
-cups
-printer-driver-all
-ibus
-ibus-fr
-gparted
-lsof
-ca-certificates
-software-properties-common
+# Profil générique inutilisé par build.sh : le script sélectionne explicitement
+# agos-lite.list.chroot ou agos-full.list.chroot.
+# Ce fichier ne doit pas contenir de paquets Ubuntu.

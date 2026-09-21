@@ -9,16 +9,17 @@ on:
         type: string
         default: v0.1.1
 
+# Le build est exécuté dans Debian Bookworm, pas dans Ubuntu.
+# Cela évite que live-build/debootstrap cherche ubuntu-keyring.
 permissions:
   contents: write
-
-env:
-  DEBIAN_FRONTEND: noninteractive
 
 jobs:
   build:
     name: Build ${{ matrix.profile }}-${{ matrix.arch }}
     runs-on: ubuntu-24.04
+    container:
+      image: node:22-bookworm
     timeout-minutes: 240
     strategy:
       fail-fast: false
@@ -27,39 +28,28 @@ jobs:
         profile: [lite, full]
 
     steps:
+      - name: Installer les outils du conteneur Debian
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git ca-certificates live-build debootstrap \
+            squashfs-tools xorriso syslinux syslinux-utils isolinux \
+            grub-pc-bin grub-efi-amd64-bin dosfstools mtools \
+            qemu-user-static binfmt-support curl
+
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Installer les dépendances
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            live-build \
-            debootstrap \
-            squashfs-tools \
-            xorriso \
-            syslinux \
-            syslinux-utils \
-            isolinux \
-            grub-pc-bin \
-            grub-efi-amd64-bin \
-            dosfstools \
-            mtools \
-            qemu-user-static \
-            binfmt-support \
-            ca-certificates \
-            curl \
-            git
 
       - name: Vérifier la configuration
         run: |
           bash -n build.sh
           test -f "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
+          grep -Rni --exclude-dir=.git ubuntu-keyring . && exit 1 || true
 
-      - name: Construire l’image
+      - name: Construire l’image Debian AgOS
         run: |
           chmod +x build.sh
-          sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
+          ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
 
       - name: Vérifier l’image et son hash
         run: |
@@ -82,7 +72,6 @@ jobs:
     name: Publier la GitHub Release
     needs: build
     runs-on: ubuntu-24.04
-
     steps:
       - name: Télécharger les images
         uses: actions/download-artifact@v4
@@ -108,11 +97,6 @@ jobs:
           prerelease: false
           generate_release_notes: true
           body: |
-            AgOS Linux — quatre éditions :
-            - AgOS Lite amd64
-            - AgOS Full amd64
-            - AgOS Lite arm64
-            - AgOS Full arm64
-
-            Utilisez les fichiers .sha256 pour vérifier les images.
+            AgOS Linux — quatre éditions.
+            Les fichiers .sha256 permettent de vérifier les images.
           files: release-assets/*
