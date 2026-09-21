@@ -1,1 +1,136 @@
-# Désactivé. Utiliser .github/workflows/agos-release.yml.
+name: AgOS Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de la release (exemple : v0.1.3)"
+        required: true
+        type: string
+        default: v0.1.3
+
+permissions:
+  contents: write
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  LC_ALL: C.UTF-8
+  LANG: C.UTF-8
+
+jobs:
+  build:
+    name: Build ${{ matrix.profile }}-${{ matrix.arch }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        profile: [lite, full]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install all Debian live-build dependencies
+        run: |
+          set -Eeuo pipefail
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bash ca-certificates curl git \
+            live-build debootstrap \
+            squashfs-tools xorriso \
+            syslinux syslinux-utils isolinux \
+            grub-pc-bin grub-efi-amd64-bin \
+            dosfstools mtools \
+            qemu-user-static binfmt-support
+          sudo update-binfmts --enable || true
+          test -x /usr/bin/qemu-aarch64-static
+          command -v lb
+          command -v debootstrap
+          command -v xorriso
+
+      - name: Remove obsolete Ubuntu package references
+        run: |
+          set -Eeuo pipefail
+          # AgOS is a Debian Bookworm image. ubuntu-keyring must never be part
+          # of a Debian package list; Debian uses debian-archive-keyring.
+          while IFS= read -r file; do
+            sudo sed -i '/^[[:space:]]*ubuntu-keyring[[:space:]]*$/d' "$file"
+          done < <(grep -RIl --exclude-dir=.git --exclude='*.md' '^[[:space:]]*ubuntu-keyring[[:space:]]*$' . || true)
+          if grep -RIn --exclude-dir=.git --exclude='*.md' 'ubuntu-keyring' config; then
+            echo 'ubuntu-keyring remains in the AgOS build configuration' >&2
+            exit 1
+          fi
+
+      - name: Validate build scripts and package lists
+        run: |
+          set -Eeuo pipefail
+          bash -n build.sh
+          test -f "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
+          test -s "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
+
+      - name: Build Debian AgOS image
+        run: |
+          set -Eeuo pipefail
+          chmod +x build.sh
+          sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
+
+      - name: Verify exact ISO output and checksum
+        run: |
+          set -Eeuo pipefail
+          image="dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
+          checksum="${image}.sha256"
+          test -f "$image"
+          test -s "$image"
+          test -f "$checksum"
+          test -s "$checksum"
+          (cd dist && sha256sum -c "$(basename "$checksum")")
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgOS-${{ matrix.profile }}-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso
+            dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all ISO artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: AgOS-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release files
+        run: |
+          set -Eeuo pipefail
+          find release-assets -maxdepth 1 -type f -print
+          test "$(find release-assets -maxdepth 1 -type f -name '*.iso' | wc -l)" -eq 4
+          test "$(find release-assets -maxdepth 1 -type f -name '*.iso.sha256' | wc -l)" -eq 4
+
+      - name: Create release and upload ISO files
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ inputs.tag }}
+          name: AgOS ${{ inputs.tag }}
+          target_commitish: ${{ github.sha }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            AgOS Linux — éditions Debian Bookworm.
+
+            Les fichiers ISO et leurs sommes SHA-256 sont joints à cette release.
+          files: release-assets/*
