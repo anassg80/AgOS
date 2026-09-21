@@ -1,0 +1,22 @@
+#!/bin/bash
+set -e
+
+# Ce hook est lancé dans le chroot
+# Il configure l’utilisateur guest et les paramètres réseau du système
+
+if id "guest" >/dev/null 2>&1; then
+  echo "guest already exists"
+else
+  useradd -m -s /bin/bash -U guest
+fi
+
+printf 'guest:guest\n' | chpasswd
+usermod -aG sudo guest
+
+mkdir -p /home/guest/Desktop /home/guest/Documents /home/guest/Downloads /home/guest/Pictures
+chown -R guest:guest /home/guest
+
+# Mot de passe root de test pour le build
+printf 'root:root\n' | chpasswd
+
+echo "guest configured"
