@@ -1,62 +1,24 @@
-# AgOS Lite et Full
+# AgOS
 
-Le dépôt contient quatre éditions distinctes :
+AgOS est une distribution Linux personnalisée basée sur Debian, avec deux profils principaux :
 
-- **Lite amd64** : anciens PC x86_64, avec Internet, Wi-Fi, Ethernet, navigateur, audio et Bluetooth.
-- **Full amd64** : PC x86_64 courants, avec bureautique, multimédia, impression et développement.
-- **Lite arm64** : même sélection légère pour appareils ARM64.
-- **Full arm64** : sélection complète pour appareils ARM64.
+- Lite : à la fois léger et connecté à Internet
+- Full : bureau complet, multimédia et développement
 
-## Lite reste Lite
+## Éditions disponibles
 
-AgOS Lite ne contient volontairement pas :
+- AgOS Lite amd64
+- AgOS Full amd64
+- AgOS Lite arm64
+- AgOS Full arm64
 
-- LibreOffice
-- VLC et logiciels multimédia supplémentaires
-- outils de compilation
-- Python/pip, Node.js/npm
-- outils d’impression
-- Synaptic et outils de développement lourds
+## Release GitHub
 
-Elle conserve cependant les éléments essentiels :
+Le dépôt contient un workflow `release.yml` qui, à partir d'un tag ou d'un déclenchement manuel, construit les 4 images Linux et les téléverse dans une GitHub Release.
 
-- XFCE et LightDM
-- Firefox ESR
-- NetworkManager et Wi-Fi
-- firmwares Wi-Fi courants
-- Bluetooth et audio
-- gestionnaire de fichiers et terminal
-- outils système de base
+Les formats de publication de la release concernent le système Linux :
 
-## Construire
+- ISO pour PC amd64
+- ISO/IMG pour ARM64 selon le matériel cible
 
-```bash
-chmod +x build.sh scripts/check-project.sh
-./scripts/check-project.sh
-
-sudo ./build.sh amd64 lite
-sudo ./build.sh amd64 full
-sudo ./build.sh arm64 lite
-sudo ./build.sh arm64 full
-```
-
-Les fichiers sont produits dans `dist/`, avec un fichier SHA-256 associé.
-
-## Compatibilité ARM64
-
-Une image ARM64 générique Debian n’est pas automatiquement une image Raspberry Pi : les firmwares, le noyau et le bootloader dépendent de la carte. Les builds ARM64 sont donc conservés et générés, mais il faut cibler le modèle exact pour garantir le démarrage sur le matériel.
-
-## Après installation
-
-Le compte Live par défaut est `guest` / `guest`. Sur une installation permanente, change immédiatement le mot de passe :
-
-```bash
-passwd
-```
-
-Puis mets à jour le système :
-
-```bash
-sudo apt update
-sudo apt full-upgrade
-```
+Les formats `.apk` / `.ipa` ne sont pas des images système Linux et sont donc documentés comme projets séparés dans `apps/`.
