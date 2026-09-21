@@ -1,0 +1,19 @@
+name: Validate AgOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate project
+        run: |
+          chmod +x scripts/check-project.sh
+          ./scripts/check-project.sh
+          bash -n build.sh
+          bash -n config/hooks/00-setup-guest.chroot
+          bash -n config/hooks/90-profile-tuning.chroot

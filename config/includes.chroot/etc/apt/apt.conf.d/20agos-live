@@ -1,0 +1,3 @@
+# AgOS : désactiver les téléchargements automatiques pendant le live.
+# L’utilisateur peut toujours mettre à jour le système avec apt.
+APT::Periodic::Enable "0";

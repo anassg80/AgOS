@@ -1,10 +1,13 @@
-# Profil AgOS Full : usage quotidien, bureautique, multimédia et développement
+# Profil Full : usage quotidien, bureautique, multimédia et développement.
 task-xfce-desktop
 lightdm
 network-manager
 network-manager-gnome
 wpasupplicant
 firmware-linux
+firmware-linux-nonfree
+firmware-iwlwifi
+firmware-realtek
 firefox-esr
 libreoffice
 vlc

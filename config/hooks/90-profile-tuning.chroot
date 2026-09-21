@@ -1,0 +1,29 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+# Réglages communs puis optimisation légère selon l’édition.
+PROFILE="full"
+if [[ -f /etc/agos-profile ]]; then
+  PROFILE="$(cat /etc/agos-profile)"
+fi
+
+# Langues disponibles pour l’utilisateur live et les installations.
+cat >/etc/default/locale <<'EOF'
+LANG=fr_FR.UTF-8
+LANGUAGE=fr_FR:fr:en_US:en
+LC_ALL=
+EOF
+
+# NetworkManager reste actif dans les deux éditions : Internet, Wi-Fi et Ethernet.
+systemctl enable NetworkManager.service 2>/dev/null || true
+systemctl enable wpa_supplicant.service 2>/dev/null || true
+
+if [[ "$PROFILE" == "lite" ]]; then
+  # Lite reste volontairement dépouillée : aucun serveur d’impression,
+  # aucun service de développement et aucun paquet Full n’est ajouté ici.
+  systemctl disable cups.service 2>/dev/null || true
+  systemctl disable avahi-daemon.service 2>/dev/null || true
+fi
+
+# Le live démarre avec LightDM et XFCE.
+systemctl enable lightdm.service 2>/dev/null || true

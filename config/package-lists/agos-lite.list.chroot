@@ -1,10 +1,14 @@
-# Profil AgOS Lite : vieux PC, mais Internet et outils essentiels
+# Profil Lite : bureau XFCE léger, réseau et Internet.
+# Ne pas ajouter de logiciels bureautiques/développement lourds ici.
 task-xfce-desktop
 lightdm
 network-manager
 network-manager-gnome
 wpasupplicant
 firmware-linux
+firmware-linux-nonfree
+firmware-iwlwifi
+firmware-realtek
 firefox-esr
 mousepad
 xfce4-terminal
