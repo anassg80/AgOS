@@ -1,83 +1,98 @@
-name: AgOS Release
+name: AgOS Debian Release
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag de la release (exemple : v0.1.3)"
+        description: "Release tag, for example v0.1.4"
         required: true
         type: string
-        default: v0.1.3
-
-permissions:
-  contents: write
+        default: v0.1.4
+  push:
+    tags:
+      - "v*"
 
 env:
   DEBIAN_FRONTEND: noninteractive
-  LC_ALL: C.UTF-8
   LANG: C.UTF-8
+  LC_ALL: C.UTF-8
 
 jobs:
   build:
     name: Build ${{ matrix.profile }}-${{ matrix.arch }}
     runs-on: ubuntu-24.04
     timeout-minutes: 240
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64]
-        profile: [lite, full]
+        arch:
+          - amd64
+          - arm64
+        profile:
+          - lite
+          - full
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install all Debian live-build dependencies
+      - name: Enable ARM64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install complete Debian image build toolchain
+        shell: bash
         run: |
           set -Eeuo pipefail
           sudo dpkg --add-architecture arm64
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            bash ca-certificates curl git \
-            live-build debootstrap \
-            squashfs-tools xorriso \
-            syslinux syslinux-utils isolinux \
-            grub-pc-bin grub-efi-amd64-bin \
-            dosfstools mtools \
-            qemu-user-static binfmt-support
+            bash \
+            ca-certificates \
+            curl \
+            debootstrap \
+            dosfstools \
+            git \
+            grub-efi-amd64-bin \
+            grub-pc-bin \
+            isolinux \
+            live-build \
+            mtools \
+            qemu-user-static \
+            binfmt-support \
+            squashfs-tools \
+            syslinux \
+            syslinux-utils \
+            xorriso
           sudo update-binfmts --enable || true
-          test -x /usr/bin/qemu-aarch64-static
-          command -v lb
           command -v debootstrap
+          command -v lb
           command -v xorriso
+          command -v mksquashfs
+          test -x /usr/bin/qemu-aarch64-static
 
-      - name: Remove obsolete Ubuntu package references
-        run: |
-          set -Eeuo pipefail
-          # AgOS is a Debian Bookworm image. ubuntu-keyring must never be part
-          # of a Debian package list; Debian uses debian-archive-keyring.
-          while IFS= read -r file; do
-            sudo sed -i '/^[[:space:]]*ubuntu-keyring[[:space:]]*$/d' "$file"
-          done < <(grep -RIl --exclude-dir=.git --exclude='*.md' '^[[:space:]]*ubuntu-keyring[[:space:]]*$' . || true)
-          if grep -RIn --exclude-dir=.git --exclude='*.md' 'ubuntu-keyring' config; then
-            echo 'ubuntu-keyring remains in the AgOS build configuration' >&2
-            exit 1
-          fi
-
-      - name: Validate build scripts and package lists
+      - name: Validate source configuration
+        shell: bash
         run: |
           set -Eeuo pipefail
           bash -n build.sh
           test -f "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
           test -s "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
+          test -f config/hooks/00-setup-guest.chroot
+          test -f config/hooks/90-profile-tuning.chroot
 
       - name: Build Debian AgOS image
+        shell: bash
         run: |
           set -Eeuo pipefail
           chmod +x build.sh
           sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
 
-      - name: Verify exact ISO output and checksum
+      - name: Verify generated ISO and checksum
+        shell: bash
         run: |
           set -Eeuo pipefail
           image="dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
@@ -98,21 +113,22 @@ jobs:
             dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256
 
   release:
-    name: Create GitHub Release
+    name: Publish AgOS GitHub Release
     needs: build
     runs-on: ubuntu-24.04
     permissions:
       contents: write
 
     steps:
-      - name: Download all ISO artifacts
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: AgOS-*
           path: release-assets
           merge-multiple: true
 
-      - name: Verify release files
+      - name: Verify release assets
+        shell: bash
         run: |
           set -Eeuo pipefail
           find release-assets -maxdepth 1 -type f -print
@@ -123,14 +139,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ inputs.tag }}
-          name: AgOS ${{ inputs.tag }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: AgOS ${{ inputs.tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
           draft: false
           prerelease: false
           generate_release_notes: true
-          body: |
-            AgOS Linux — éditions Debian Bookworm.
-
-            Les fichiers ISO et leurs sommes SHA-256 sont joints à cette release.
-          files: release-assets/*
+          files: |
+            release-assets/AgOS-lite-amd64.iso
+            release-assets/AgOS-lite-amd64.iso.sha256
+            release-assets/AgOS-full-amd64.iso
+            release-assets/AgOS-full-amd64.iso.sha256
+            release-assets/AgOS-lite-arm64.iso
+            release-assets/AgOS-lite-arm64.iso.sha256
+            release-assets/AgOS-full-arm64.iso
+            release-assets/AgOS-full-arm64.iso.sha256
