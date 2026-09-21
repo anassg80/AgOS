@@ -1,0 +1,144 @@
+name: AgOS Release Native
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.1.7"
+        required: true
+        type: string
+        default: v0.1.7
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8
+
+jobs:
+  build:
+    name: Build ${{ matrix.profile }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+        profile:
+          - lite
+          - full
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native Debian image build dependencies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+            bash \
+            ca-certificates \
+            debootstrap \
+            dosfstools \
+            git \
+            grub-efi-amd64-bin \
+            grub-pc-bin \
+            isolinux \
+            live-build \
+            mtools \
+            qemu-user-static \
+            squashfs-tools \
+            syslinux \
+            syslinux-utils \
+            xorriso
+          command -v debootstrap
+          command -v lb
+          command -v xorriso
+          command -v mksquashfs
+
+      - name: Validate native build
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
+          bash -n build.sh
+          test -s "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
+          test -f config/hooks/00-setup-guest.chroot
+          test -f config/hooks/90-profile-tuning.chroot
+          if grep -RIn --exclude-dir=.git --exclude='*.md' 'ubuntu-keyring' config; then
+            echo "ubuntu-keyring is not allowed in Debian configuration" >&2
+            exit 1
+          fi
+
+      - name: Build ISO
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x build.sh
+          sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
+
+      - name: Verify ISO
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          image="dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
+          checksum="${image}.sha256"
+          test -s "$image"
+          test -s "$checksum"
+          (cd dist && sha256sum -c "$(basename "$checksum")")
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgOS-${{ matrix.profile }}-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso
+            dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256
+
+  release:
+    name: Publish AgOS release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: AgOS-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          find release-assets -maxdepth 1 -type f -print
+          test "$(find release-assets -maxdepth 1 -type f -name '*.iso' | wc -l)" -eq 4
+          test "$(find release-assets -maxdepth 1 -type f -name '*.iso.sha256' | wc -l)" -eq 4
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: AgOS ${{ inputs.tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: release-assets/*
