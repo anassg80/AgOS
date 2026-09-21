@@ -1,0 +1,119 @@
+name: AgOS Release - clean build
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de release"
+        required: true
+        type: string
+        default: v0.1.6
+
+permissions:
+  contents: write
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8
+
+jobs:
+  build:
+    name: Build ${{ matrix.profile }}-${{ matrix.arch }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        profile: [lite, full]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable ARM64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+            bash ca-certificates debootstrap dosfstools git \
+            grub-efi-amd64-bin grub-pc-bin isolinux live-build mtools \
+            qemu-user-static binfmt-support squashfs-tools syslinux \
+            syslinux-utils xorriso
+          sudo update-binfmts --enable || true
+          command -v lb
+          command -v debootstrap
+          command -v xorriso
+          command -v mksquashfs
+          test -x /usr/bin/qemu-aarch64-static
+
+      - name: Validate source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n build.sh
+          test -s "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
+
+      - name: Build ISO
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x build.sh
+          sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
+
+      - name: Verify ISO
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          image="dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
+          test -s "$image"
+          test -s "$image.sha256"
+          (cd dist && sha256sum -c "$(basename "$image").sha256")
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgOS-${{ matrix.profile }}-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso
+            dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: AgOS-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify all assets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(find release-assets -maxdepth 1 -name '*.iso' | wc -l)" -eq 4
+          test "$(find release-assets -maxdepth 1 -name '*.sha256' | wc -l)" -eq 4
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ inputs.tag }}
+          name: AgOS ${{ inputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: release-assets/*
