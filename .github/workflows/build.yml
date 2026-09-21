@@ -1,17 +1,23 @@
-name: Build AgOS ISO
+name: Build AgOS editions
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.profile }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [lite, full]
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install build dependencies
@@ -20,15 +26,17 @@ jobs:
           sudo apt-get install -y \
             live-build debootstrap squashfs-tools xorriso syslinux syslinux-utils \
             isolinux grub-pc-bin grub-efi-amd64-bin grub-efi-arm64-bin dosfstools \
-            mtools wget curl ca-certificates git imagemagick
+            mtools ca-certificates curl git qemu-user-static qemu-system-x86
 
-      - name: Build AgOS amd64 ISO
+      - name: Build ${{ matrix.profile }}
         run: |
           chmod +x build.sh
-          sudo ./build.sh amd64
+          sudo ./build.sh amd64 "${{ matrix.profile }}"
 
-      - name: Upload built artifact
+      - name: Upload ${{ matrix.profile }} ISO
         uses: actions/upload-artifact@v4
         with:
-          name: agos-iso
-          path: ./build/result/*.iso
+          name: AgOS-${{ matrix.profile }}-amd64
+          path: |
+            dist/AgOS-${{ matrix.profile }}-amd64.iso
+            dist/AgOS-${{ matrix.profile }}-amd64.iso.sha256

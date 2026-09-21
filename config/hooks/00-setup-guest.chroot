@@ -1,22 +1,36 @@
 #!/bin/bash
-set -e
+set -Eeuo pipefail
 
-# Ce hook est lancé dans le chroot
-# Il configure l’utilisateur guest et les paramètres réseau du système
+# Configuration commune aux profils live AgOS.
+# Le compte guest est prévu pour une session Live. Change son mot de passe
+# immédiatement après une installation permanente.
 
-if id "guest" >/dev/null 2>&1; then
-  echo "guest already exists"
-else
-  useradd -m -s /bin/bash -U guest
+if ! id guest >/dev/null 2>&1; then
+  useradd --create-home --shell /bin/bash --user-group guest
 fi
 
 printf 'guest:guest\n' | chpasswd
-usermod -aG sudo guest
+usermod -aG sudo,audio,video,plugdev,netdev guest
 
-mkdir -p /home/guest/Desktop /home/guest/Documents /home/guest/Downloads /home/guest/Pictures
-chown -R guest:guest /home/guest
+install -d -o guest -g guest \
+  /home/guest/Desktop \
+  /home/guest/Documents \
+  /home/guest/Downloads \
+  /home/guest/Pictures \
+  /home/guest/Videos
 
-# Mot de passe root de test pour le build
-printf 'root:root\n' | chpasswd
+# Ne pas activer de connexion root distante.
+passwd -l root || true
 
-echo "guest configured"
+# Génère les locales disponibles.
+if grep -q '^# *fr_FR.UTF-8 UTF-8' /etc/locale.gen; then
+  sed -i 's/^# *fr_FR.UTF-8 UTF-8/fr_FR.UTF-8 UTF-8/' /etc/locale.gen
+fi
+if grep -q '^# *en_US.UTF-8 UTF-8' /etc/locale.gen; then
+  sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+fi
+locale-gen || true
+
+# NetworkManager est le gestionnaire réseau de bureau.
+systemctl enable NetworkManager.service 2>/dev/null || true
+systemctl enable lightdm.service 2>/dev/null || true

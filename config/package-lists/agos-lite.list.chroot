@@ -1,0 +1,24 @@
+# Profil AgOS Lite : vieux PC, mais Internet et outils essentiels
+task-xfce-desktop
+lightdm
+network-manager
+network-manager-gnome
+wpasupplicant
+firmware-linux
+firefox-esr
+mousepad
+xfce4-terminal
+thunar-archive-plugin
+file-roller
+pavucontrol
+alsa-utils
+blueman
+sudo
+curl
+wget
+ca-certificates
+vim-tiny
+htop
+fonts-dejavu-core
+fonts-noto-core
+locales

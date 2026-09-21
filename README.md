@@ -1,122 +1,58 @@
-# AgOS
+# AgOS — deux éditions
 
-AgOS est une distribution Linux personnalisée basée sur Debian, conçue pour offrir un environnement stable, moderne et facilement installable sur PC classiques.
+Le dépôt fournit deux profils :
 
-## Ce que contient le projet
+| Édition | Usage | Commande |
+|---|---|---|
+| **Lite** | vieux PC, faible RAM, Internet, Wi‑Fi, navigateur et outils essentiels | `sudo ./build.sh amd64 lite` |
+| **Full** | PC courant, bureautique, multimédia et développement | `sudo ./build.sh amd64 full` |
 
-- base Debian Bookworm stable
-- environnement XFCE léger et fluide
-- gestionnaire de session LightDM
-- utilisateur `guest` créé par défaut
-- langue française + anglais
-- thème personnalisé AgOS
-- support de build ISO live-build pour x86_64
-- base pour support ARM64 / Raspberry Pi
+## AgOS Lite
 
-## Fonctionnalités prévues
+XFCE allégé, Firefox ESR, NetworkManager, Wi‑Fi, Bluetooth, audio et outils système. Cette édition évite LibreOffice, les outils de développement lourds et les applications multimédias supplémentaires afin de réduire la taille et la consommation mémoire.
 
-- ISO bootable pour PC x86_64
-- installation sur disque via l’installateur Debian
-- thème AgOS avec fond d’écran, palette visuelle et éléments personnalisés
-- logiciels de bureau et de développement de base
-- scripts de configuration automatique
-- extension future vers ARM64 et versions plus complètes
+## AgOS Full
 
-## Prérequis
+Ajoute LibreOffice, VLC, codecs FFmpeg, gestion audio, impression, GParted, Git, Python, Node.js, npm, compilateur et outils de développement.
 
-Sur Debian/Ubuntu :
+## Construction locale
+
+Sur Debian/Ubuntu 64 bits :
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y git curl wget ca-certificates imagemagick
-```
+sudo apt update
+sudo apt install -y git ca-certificates
 
-## Génération de l’ISO
-
-```bash
+git clone https://github.com/anassg80/AgOS.git
+cd AgOS
 chmod +x build.sh
-sudo ./build.sh amd64
+
+# Vieux PC x86_64
+sudo ./build.sh amd64 lite
+
+# PC courant x86_64
+sudo ./build.sh amd64 full
 ```
 
-Le fichier ISO sera produit dans :
+Les ISO et leurs empreintes SHA-256 sont placées dans `dist/`.
+
+## Test
 
 ```bash
-./build/result/
+qemu-system-x86_64 -m 2048 -cdrom dist/AgOS-lite-amd64.iso
+qemu-system-x86_64 -m 4096 -cdrom dist/AgOS-full-amd64.iso
 ```
 
-## Création d’une clé USB bootable
+Le compte Live est `guest` / `guest`. Après une installation permanente, change ce mot de passe immédiatement :
 
 ```bash
-sudo dd if=./build/result/live-image-amd64.hybrid.iso of=/dev/sdX bs=4M status=progress oflag=sync
+passwd
 ```
 
-Remplace `/dev/sdX` par le bon périphérique.
+## ARM64
 
-## Test avec QEMU
+La commande `sudo ./build.sh arm64 lite` ou `sudo ./build.sh arm64 full` prépare un build Debian ARM64. L'image obtenue n'est pas automatiquement compatible avec chaque carte ARM : le noyau, le firmware et le bootloader varient selon le modèle. Pour Raspberry Pi, une image dédiée devra être ajoutée avec le firmware correspondant.
 
-```bash
-qemu-system-x86_64 -cdrom ./build/result/live-image-amd64.hybrid.iso -m 4096
-```
+## GitHub Actions
 
-## Structure du dépôt
-
-```text
-AgOS/
-├── .github/
-│   └── workflows/
-│       └── build.yml
-├── build.sh
-├── LICENSE
-├── README.md
-├── .gitignore
-├── config/
-│   ├── hooks/
-│   │   └── 00-setup-guest.chroot
-│   ├── includes.chroot/
-│   │   ├── etc/
-│   │   │   ├── hostname
-│   │   │   ├── hosts
-│   │   │   ├── lightdm/
-│   │   │   │   └── lightdm.conf.d/
-│   │   │   │       └── agos.conf
-│   │   │   ├── profile.d/
-│   │   │   │   └── agos.sh
-│   │   │   └── skel/
-│   │   │       ├── .bashrc
-│   │   │       └── .config/
-│   │   │           └── xfce4/
-│   │   │               └── xfconf/
-│   │   │                   └── xfce-perchannel-xml/
-│   │   │                       └── xfce4-desktop.xml
-│   │   └── usr/
-│   │       └── share/
-│   │           └── backgrounds/
-│   │               └── agos-wallpaper.svg
-│   └── package-lists/
-│       └── agos.list.chroot
-├── scripts/
-│   ├── install-agos.sh
-│   └── setup-guest.sh
-├── theme/
-│   ├── README.md
-│   └── agos-logo.svg
-└── build/
-```
-
-## Sécurité des comptes par défaut
-
-Le projet utilise un compte utilisateur par défaut `guest` avec mot de passe `guest` uniquement dans le système de build initial. Tu peux ensuite le sécuriser lors de la personnalisation finale de l’image.
-
-## Roadmap
-
-- version x86_64 stable
-- support ARM64
-- amélioration du thème AgOS
-- configuration de bureau renforcée
-- splash screen personnalisé
-- support de live install / autoinstall
-- compatibilité pour anciens PC
-
-## Licence
-
-MIT
+Le workflow construit les deux éditions amd64 et publie les ISO comme artefacts de workflow. Les ISO peuvent aussi être construites localement pour ARM64.

@@ -1,143 +1,86 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
 ARCH="${1:-amd64}"
+PROFILE="${2:-full}"
 
-case "$ARCH" in
-  amd64|arm64)
-    ;;
-  *)
-    echo "Architecture non prise en charge : $ARCH"
-    echo "Utilise : amd64 ou arm64"
-    exit 1
-    ;;
-esac
+if [[ "$ARCH" != "amd64" && "$ARCH" != "arm64" ]]; then
+  echo "Architecture invalide : $ARCH (utilise amd64 ou arm64)" >&2
+  exit 2
+fi
 
-if [ "$EUID" -ne 0 ]; then
-  echo "Ce script doit être exécuté en root ou via sudo."
-  echo "Exemple : sudo ./build.sh amd64"
+if [[ "$PROFILE" != "lite" && "$PROFILE" != "full" ]]; then
+  echo "Profil invalide : $PROFILE (utilise lite ou full)" >&2
+  exit 2
+fi
+
+if [[ $EUID -ne 0 ]]; then
+  echo "Lance ce script avec sudo : sudo ./build.sh amd64 lite" >&2
   exit 1
 fi
 
+export DEBIAN_FRONTEND=noninteractive
+
 if ! command -v lb >/dev/null 2>&1; then
-  echo "live-build n'est pas installé. Installation des dépendances..."
   apt-get update
   apt-get install -y \
-    live-build \
-    debootstrap \
-    squashfs-tools \
-    xorriso \
-    syslinux \
-    syslinux-utils \
-    isolinux \
-    grub-pc-bin \
-    grub-efi-amd64-bin \
-    grub-efi-arm64-bin \
-    dosfstools \
-    mtools \
-    wget \
-    curl \
-    ca-certificates \
-    git \
-    imagemagick
+    live-build debootstrap squashfs-tools xorriso syslinux syslinux-utils \
+    isolinux grub-pc-bin grub-efi-amd64-bin grub-efi-arm64-bin dosfstools \
+    mtools ca-certificates curl git qemu-user-static
 fi
 
-if [ "$ARCH" = "arm64" ] && ! command -v qemu-aarch64-static >/dev/null 2>&1; then
-  echo "Installation de qemu-user-static pour l’architecture ARM64..."
-  apt-get install -y qemu-user-static
-fi
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORK_DIR="$ROOT_DIR/build/${ARCH}-${PROFILE}"
 
-echo "Architecture cible : $ARCH"
+rm -rf "$WORK_DIR"
+mkdir -p "$WORK_DIR"
+cd "$WORK_DIR"
 
-echo "Nettoyage du dossier précédent..."
-rm -rf ./build
-mkdir -p ./build
-cd ./build
-
+# Debian live-build ne peut produire qu'une image par répertoire de travail.
 lb config \
   --distribution bookworm \
   --binary-images iso-hybrid \
   --architectures "$ARCH" \
-  --debian-installer false \
+  --debian-installer live \
   --archive-areas "main contrib non-free non-free-firmware" \
-  --mirror-bootstrap "http://deb.debian.org/debian" \
-  --mirror-binary "http://deb.debian.org/debian" \
-  --mirror-chroot "http://deb.debian.org/debian" \
-  --mirror-chroot-security "http://deb.debian.org/debian-security" \
-  --mirror-binary-security "http://deb.debian.org/debian-security" \
-  --bootappend-live "boot=live components splash username=guest" \
-  --bootappend-live-failsafe "boot=live components memtest"
+  --mirror-bootstrap "https://deb.debian.org/debian" \
+  --mirror-binary "https://deb.debian.org/debian" \
+  --mirror-chroot "https://deb.debian.org/debian" \
+  --mirror-chroot-security "https://deb.debian.org/debian-security" \
+  --mirror-binary-security "https://deb.debian.org/debian-security" \
+  --bootappend-live "boot=live components username=guest locales=fr_FR.UTF-8,en_US.UTF-8" \
+  --bootappend-live-failsafe "boot=live components"
 
-cp -r ../config ./
+mkdir -p config
+cp -a "$ROOT_DIR/config/." config/
+
+rm -f config/package-lists/*.list.chroot
+cp "$ROOT_DIR/config/package-lists/agos-${PROFILE}.list.chroot" \
+  "config/package-lists/agos.list.chroot"
+
+mkdir -p config/includes.chroot/usr/share/backgrounds
+cp "$ROOT_DIR/config/includes.chroot/usr/share/backgrounds/agos-wallpaper.svg" \
+  config/includes.chroot/usr/share/backgrounds/
 
 mkdir -p config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml
-mkdir -p config/includes.chroot/etc/profile.d
-mkdir -p config/includes.chroot/etc/lightdm/lightdm.conf.d
-mkdir -p config/includes.chroot/usr/share/backgrounds
+cp "$ROOT_DIR/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml" \
+  config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/
 
-# Fond d’écran par défaut AgOS
-if [ ! -f ../config/includes.chroot/usr/share/backgrounds/agos-wallpaper.svg ]; then
-  echo "Aucun fond d'écran n'a été trouvé. Création du fond d’écran AgOS..."
-fi
+# Enregistre le profil dans l'image construite.
+printf '%s\n' "$PROFILE" > config/includes.chroot/etc/agos-profile
 
-# Vérifie que le fond est présent et le copie dans les fichiers de build
-if [ -f ../config/includes.chroot/usr/share/backgrounds/agos-wallpaper.svg ]; then
-  cp ../config/includes.chroot/usr/share/backgrounds/agos-wallpaper.svg \
-    config/includes.chroot/usr/share/backgrounds/agos-wallpaper.svg
-fi
-
-# Fichier de config par défaut XFCE
-cat > config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<channel name="xfce4-desktop" version="1.0">
-  <property name="backdrop" type="empty"/>
-  <property name="desktop-icons" type="empty"/>
-  <property name="last" type="empty"/>
-</channel>
-EOF
-
-# Fichier de configuration pour présenter AgOS
-cat > config/includes.chroot/etc/profile.d/agos.sh <<'EOF'
-#!/bin/bash
-
-echo "Bienvenue sur AgOS"
-echo "Distribution Debian personnalisée"
-echo "Utilisateur par défaut : guest"
-echo "Mot de passe : guest (à sécuriser après installation)"
-echo
-EOF
-chmod +x config/includes.chroot/etc/profile.d/agos.sh
-
-# LightDM : autologin guest pour le live session
-cat > config/includes.chroot/etc/lightdm/lightdm.conf.d/agos.conf <<'EOF'
-[Seat:*]
-user-session=xfce
-autologin-user=guest
-autologin-user-timeout=0
-greeter-show-manual-login=true
-greeter-hide-users=false
-EOF
-
-# Fichier d’accueil utilisateur bash
-cat > config/includes.chroot/etc/skel/.bashrc <<'EOF'
-# ~/.bashrc
-
-export PS1="\[\e[32m\][\u@\h \W]\$\[\e[0m\] "
-export LANG=fr_FR.UTF-8
-export LANGUAGE=fr_FR:fr:en_US:en
-
-alias ll='ls -alF'
-alias la='ls -A'
-alias l='ls -CF'
-alias grep='grep --color=auto'
-alias ..='cd ..'
-
-neofetch 2>/dev/null || true
-EOF
-
-echo "Construction de l’image AgOS pour $ARCH..."
 lb build
 
-echo
-echo "ISO produite dans : ./build/result/"
-ls -lh result || true
+mkdir -p "$ROOT_DIR/dist"
+OUTPUT="$(find . -maxdepth 1 -type f -name '*.iso' -print -quit)"
+if [[ -z "$OUTPUT" ]]; then
+  echo "Aucune ISO n'a été produite." >&2
+  exit 1
+fi
+
+FINAL="$ROOT_DIR/dist/AgOS-${PROFILE}-${ARCH}.iso"
+cp "$OUTPUT" "$FINAL"
+sha256sum "$FINAL" > "$FINAL.sha256"
+
+echo "ISO créée : $FINAL"
+echo "Empreinte : $FINAL.sha256"
