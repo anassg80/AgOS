@@ -10,7 +10,7 @@ PROFILE="${2:-full}"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y live-build debootstrap squashfs-tools xorriso syslinux syslinux-utils isolinux grub-pc-bin grub-efi-amd64-bin dosfstools mtools ca-certificates curl git qemu-user-static
+apt-get install -y live-build debootstrap squashfs-tools xorriso syslinux syslinux-utils isolinux grub-pc-bin grub-efi-amd64-bin dosfstools mtools ca-certificates curl git qemu-user-static binfmt-support
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK_DIR="$ROOT_DIR/build/${ARCH}-${PROFILE}"
@@ -18,10 +18,16 @@ rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 
-# iso-hybrid est adapté aux PC amd64. Pour ARM64, on produit une ISO classique :
-# le bootloader/firmware dépend de la carte ARM ciblée.
 BINARY_IMAGES="iso-hybrid"
-[[ "$ARCH" == "arm64" ]] && BINARY_IMAGES="iso"
+LB_EXTRA=()
+if [[ "$ARCH" == "arm64" ]]; then
+  # ARM64 est une architecture étrangère au runner amd64. Ces options
+  # permettent à debootstrap d’exécuter les étapes chroot via QEMU.
+  BINARY_IMAGES="iso"
+  QEMU_STATIC="/usr/bin/qemu-aarch64-static"
+  [[ -x "$QEMU_STATIC" ]] || { echo "qemu-aarch64-static introuvable" >&2; exit 1; }
+  LB_EXTRA+=(--bootstrap-qemu-arch arm64 --bootstrap-qemu-static "$QEMU_STATIC")
+fi
 
 lb config \
   --distribution bookworm \
@@ -34,7 +40,8 @@ lb config \
   --mirror-chroot "https://deb.debian.org/debian" \
   --mirror-chroot-security "https://deb.debian.org/debian-security" \
   --mirror-binary-security "https://deb.debian.org/debian-security" \
-  --bootappend-live "boot=live components username=guest locales=fr_FR.UTF-8,en_US.UTF-8"
+  --bootappend-live "boot=live components username=guest locales=fr_FR.UTF-8,en_US.UTF-8" \
+  "${LB_EXTRA[@]}"
 
 mkdir -p config
 cp -a "$ROOT_DIR/config/." config/
