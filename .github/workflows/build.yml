@@ -8,12 +8,14 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.profile }}
+    name: Build ${{ matrix.profile }}-${{ matrix.arch }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
+        # Les quatre éditions sont conservées : amd64 Lite/Full et arm64 Lite/Full.
+        arch: [amd64, arm64]
         profile: [lite, full]
 
     steps:
@@ -28,15 +30,15 @@ jobs:
             isolinux grub-pc-bin grub-efi-amd64-bin grub-efi-arm64-bin dosfstools \
             mtools ca-certificates curl git qemu-user-static qemu-system-x86
 
-      - name: Build ${{ matrix.profile }}
+      - name: Build ${{ matrix.profile }} ${{ matrix.arch }}
         run: |
           chmod +x build.sh
-          sudo ./build.sh amd64 "${{ matrix.profile }}"
+          sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
 
-      - name: Upload ${{ matrix.profile }} ISO
+      - name: Upload ${{ matrix.profile }} ${{ matrix.arch }} ISO
         uses: actions/upload-artifact@v4
         with:
-          name: AgOS-${{ matrix.profile }}-amd64
+          name: AgOS-${{ matrix.profile }}-${{ matrix.arch }}
           path: |
-            dist/AgOS-${{ matrix.profile }}-amd64.iso
-            dist/AgOS-${{ matrix.profile }}-amd64.iso.sha256
+            dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso
+            dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256

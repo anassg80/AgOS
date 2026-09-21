@@ -15,7 +15,7 @@ if [[ "$PROFILE" != "lite" && "$PROFILE" != "full" ]]; then
 fi
 
 if [[ $EUID -ne 0 ]]; then
-  echo "Lance ce script avec sudo : sudo ./build.sh amd64 lite" >&2
+  echo "Lance ce script avec sudo : sudo ./build.sh arm64 lite" >&2
   exit 1
 fi
 
@@ -29,6 +29,11 @@ if ! command -v lb >/dev/null 2>&1; then
     mtools ca-certificates curl git qemu-user-static
 fi
 
+if [[ "$ARCH" == "arm64" ]] && ! command -v qemu-aarch64-static >/dev/null 2>&1; then
+  apt-get update
+  apt-get install -y qemu-user-static
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK_DIR="$ROOT_DIR/build/${ARCH}-${PROFILE}"
 
@@ -36,7 +41,7 @@ rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 
-# Debian live-build ne peut produire qu'une image par répertoire de travail.
+# Un environnement de build indépendant est utilisé pour chaque combinaison.
 lb config \
   --distribution bookworm \
   --binary-images iso-hybrid \
@@ -53,28 +58,20 @@ lb config \
 
 mkdir -p config
 cp -a "$ROOT_DIR/config/." config/
-
 rm -f config/package-lists/*.list.chroot
 cp "$ROOT_DIR/config/package-lists/agos-${PROFILE}.list.chroot" \
-  "config/package-lists/agos.list.chroot"
+  config/package-lists/agos.list.chroot
 
-mkdir -p config/includes.chroot/usr/share/backgrounds
-cp "$ROOT_DIR/config/includes.chroot/usr/share/backgrounds/agos-wallpaper.svg" \
-  config/includes.chroot/usr/share/backgrounds/
-
-mkdir -p config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml
-cp "$ROOT_DIR/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml" \
-  config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/
-
-# Enregistre le profil dans l'image construite.
+mkdir -p config/includes.chroot/etc
 printf '%s\n' "$PROFILE" > config/includes.chroot/etc/agos-profile
+printf '%s\n' "$ARCH" > config/includes.chroot/etc/agos-architecture
 
 lb build
 
 mkdir -p "$ROOT_DIR/dist"
 OUTPUT="$(find . -maxdepth 1 -type f -name '*.iso' -print -quit)"
 if [[ -z "$OUTPUT" ]]; then
-  echo "Aucune ISO n'a été produite." >&2
+  echo "Aucune ISO n'a été produite pour $ARCH/$PROFILE." >&2
   exit 1
 fi
 

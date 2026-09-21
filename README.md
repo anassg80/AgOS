@@ -1,58 +1,53 @@
-# AgOS — deux éditions
+# AgOS — quatre éditions
 
-Le dépôt fournit deux profils :
+Les quatre éditions sont disponibles sans supprimer les versions existantes :
 
 | Édition | Usage | Commande |
 |---|---|---|
-| **Lite** | vieux PC, faible RAM, Internet, Wi‑Fi, navigateur et outils essentiels | `sudo ./build.sh amd64 lite` |
-| **Full** | PC courant, bureautique, multimédia et développement | `sudo ./build.sh amd64 full` |
+| **Lite amd64** | vieux PC x86_64 | `sudo ./build.sh amd64 lite` |
+| **Full amd64** | PC x86_64 courant | `sudo ./build.sh amd64 full` |
+| **Lite arm64** | appareil ARM64 peu puissant | `sudo ./build.sh arm64 lite` |
+| **Full arm64** | appareil ARM64 plus puissant | `sudo ./build.sh arm64 full` |
 
-## AgOS Lite
+## Versions ARM64
 
-XFCE allégé, Firefox ESR, NetworkManager, Wi‑Fi, Bluetooth, audio et outils système. Cette édition évite LibreOffice, les outils de développement lourds et les applications multimédias supplémentaires afin de réduire la taille et la consommation mémoire.
+Les deux profils ARM64 utilisent exactement les mêmes logiciels de base que leurs équivalents amd64 :
 
-## AgOS Full
+- **AgOS Lite ARM64** : XFCE, NetworkManager, Wi-Fi, Bluetooth, audio, Firefox ESR et outils essentiels.
+- **AgOS Full ARM64** : Lite plus LibreOffice, VLC, codecs FFmpeg, impression, GParted et outils de développement.
 
-Ajoute LibreOffice, VLC, codecs FFmpeg, gestion audio, impression, GParted, Git, Python, Node.js, npm, compilateur et outils de développement.
+La commande ARM64 doit être exécutée sur une machine Debian/Ubuntu compatible avec le build. `live-build` produit une image Debian ARM64, mais le démarrage dépend de la carte : un Raspberry Pi, une carte ARM générique et un PC ARM peuvent nécessiter des firmwares, noyaux ou bootloaders différents.
 
-## Construction locale
+Pour Raspberry Pi, cette première version est donc une base ARM64 générique ; une prochaine étape pourra ajouter une image dédiée au modèle exact de ta carte.
 
-Sur Debian/Ubuntu 64 bits :
+## Construire les quatre versions
 
 ```bash
-sudo apt update
-sudo apt install -y git ca-certificates
-
-git clone https://github.com/anassg80/AgOS.git
-cd AgOS
 chmod +x build.sh
-
-# Vieux PC x86_64
 sudo ./build.sh amd64 lite
-
-# PC courant x86_64
 sudo ./build.sh amd64 full
+sudo ./build.sh arm64 lite
+sudo ./build.sh arm64 full
 ```
 
-Les ISO et leurs empreintes SHA-256 sont placées dans `dist/`.
+Les fichiers sont placés dans `dist/` :
 
-## Test
-
-```bash
-qemu-system-x86_64 -m 2048 -cdrom dist/AgOS-lite-amd64.iso
-qemu-system-x86_64 -m 4096 -cdrom dist/AgOS-full-amd64.iso
+```text
+dist/AgOS-lite-amd64.iso
+dist/AgOS-full-amd64.iso
+dist/AgOS-lite-arm64.iso
+dist/AgOS-full-arm64.iso
 ```
 
-Le compte Live est `guest` / `guest`. Après une installation permanente, change ce mot de passe immédiatement :
-
-```bash
-passwd
-```
-
-## ARM64
-
-La commande `sudo ./build.sh arm64 lite` ou `sudo ./build.sh arm64 full` prépare un build Debian ARM64. L'image obtenue n'est pas automatiquement compatible avec chaque carte ARM : le noyau, le firmware et le bootloader varient selon le modèle. Pour Raspberry Pi, une image dédiée devra être ajoutée avec le firmware correspondant.
+Chaque ISO possède aussi un fichier `.sha256`.
 
 ## GitHub Actions
 
-Le workflow construit les deux éditions amd64 et publie les ISO comme artefacts de workflow. Les ISO peuvent aussi être construites localement pour ARM64.
+Le workflow construit maintenant les quatre combinaisons en parallèle :
+
+- amd64 + lite
+- amd64 + full
+- arm64 + lite
+- arm64 + full
+
+Les fichiers sont disponibles dans les artefacts de l’exécution GitHub Actions. Les builds ARM64 peuvent prendre davantage de temps et leur compatibilité de démarrage doit être vérifiée sur le matériel cible.
