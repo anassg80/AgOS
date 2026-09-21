@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build ${{ matrix.profile }}-${{ matrix.arch }}
@@ -14,29 +17,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Les quatre éditions sont conservées : amd64 Lite/Full et arm64 Lite/Full.
         arch: [amd64, arm64]
         profile: [lite, full]
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install build dependencies
+      - uses: actions/checkout@v4
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             live-build debootstrap squashfs-tools xorriso syslinux syslinux-utils \
-            isolinux grub-pc-bin grub-efi-amd64-bin grub-efi-arm64-bin dosfstools \
-            mtools ca-certificates curl git qemu-user-static qemu-system-x86
-
-      - name: Build ${{ matrix.profile }} ${{ matrix.arch }}
+            isolinux grub-pc-bin grub-efi-amd64-bin dosfstools mtools \
+            ca-certificates curl git qemu-user-static
+      - name: Build
         run: |
           chmod +x build.sh
           sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
-
-      - name: Upload ${{ matrix.profile }} ${{ matrix.arch }} ISO
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: AgOS-${{ matrix.profile }}-${{ matrix.arch }}
           path: |
