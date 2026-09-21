@@ -1,0 +1,118 @@
+name: AgOS Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de la release, par exemple v0.1.1"
+        required: true
+        type: string
+        default: v0.1.1
+
+permissions:
+  contents: write
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  build:
+    name: Build ${{ matrix.profile }}-${{ matrix.arch }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        profile: [lite, full]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer les dépendances
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            live-build \
+            debootstrap \
+            squashfs-tools \
+            xorriso \
+            syslinux \
+            syslinux-utils \
+            isolinux \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            dosfstools \
+            mtools \
+            qemu-user-static \
+            binfmt-support \
+            ca-certificates \
+            curl \
+            git
+
+      - name: Vérifier la configuration
+        run: |
+          bash -n build.sh
+          test -f "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
+
+      - name: Construire l’image
+        run: |
+          chmod +x build.sh
+          sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
+
+      - name: Vérifier l’image et son hash
+        run: |
+          IMAGE="dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
+          HASH="${IMAGE}.sha256"
+          test -s "$IMAGE"
+          test -s "$HASH"
+          (cd "$(dirname "$IMAGE")" && sha256sum -c "$(basename "$HASH")")
+
+      - name: Conserver l’image comme artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgOS-${{ matrix.profile }}-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso
+            dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256
+
+  release:
+    name: Publier la GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Télécharger les images
+        uses: actions/download-artifact@v4
+        with:
+          pattern: AgOS-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Vérifier les quatre images
+        run: |
+          set -Eeuo pipefail
+          find release-assets -maxdepth 1 -type f -print
+          test "$(find release-assets -maxdepth 1 -type f -name '*.iso' | wc -l)" -eq 4
+          test "$(find release-assets -maxdepth 1 -type f -name '*.sha256' | wc -l)" -eq 4
+
+      - name: Publier la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: AgOS ${{ inputs.tag }}
+          target_commitish: ${{ github.sha }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            AgOS Linux — quatre éditions :
+            - AgOS Lite amd64
+            - AgOS Full amd64
+            - AgOS Lite arm64
+            - AgOS Full arm64
+
+            Utilisez les fichiers .sha256 pour vérifier les images.
+          files: release-assets/*
