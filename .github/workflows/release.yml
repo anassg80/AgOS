@@ -1,13 +1,13 @@
-name: AgOS Debian Release
+name: AgOS Debian ISO Release
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v0.1.5"
+        description: "Release tag, for example v0.1.8"
         required: true
         type: string
-        default: v0.1.5
+        default: v0.1.8
   push:
     tags:
       - "v*"
@@ -23,66 +23,108 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.profile }}-${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+        arch:
+          - amd64
+          - arm64
         profile:
           - lite
           - full
 
     steps:
+      - name: Clean runner
+        shell: bash
+        run: |
+          set -ex
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo apt-get clean
+          df -h
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Debian image build dependencies
+      - name: Enable ARM64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install Debian ISO build dependencies
         shell: bash
         run: |
-          set -Eeuo pipefail
-          sudo apt-get -o Acquire::Retries=5 update
-          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
-            bash ca-certificates curl debootstrap dosfstools git \
-            grub-efi-amd64-bin grub-pc-bin isolinux live-build mtools \
-            squashfs-tools syslinux syslinux-utils xorriso
+          set -ex
+          sudo apt-get update
+          sudo apt-get install -y \
+            bash \
+            binfmt-support \
+            ca-certificates \
+            curl \
+            debootstrap \
+            dosfstools \
+            file \
+            git \
+            grub-efi-amd64-bin \
+            grub-pc-bin \
+            isolinux \
+            live-build \
+            mtools \
+            qemu-user-static \
+            rsync \
+            squashfs-tools \
+            syslinux \
+            syslinux-common \
+            syslinux-utils \
+            xorriso
+          sudo update-binfmts --enable || true
           command -v debootstrap
           command -v lb
-          command -v xorriso
           command -v mksquashfs
+          command -v xorriso
+          command -v qemu-aarch64-static
+          command -v file
 
-      - name: Validate native architecture and source
+      - name: Validate repository configuration
         shell: bash
         run: |
-          set -Eeuo pipefail
-          test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
-          bash -n build.sh
-          test -s "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
-          test -f config/hooks/00-setup-guest.chroot
-          test -f config/hooks/90-profile-tuning.chroot
-
-      - name: Build Debian AgOS image
-        shell: bash
-        run: |
-          set -Eeuo pipefail
+          set -ex
+          test -f build.sh
           chmod +x build.sh
-          sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
+          bash -n build.sh
+          test -d config
+          test -s "config/package-lists/agos-${{ matrix.profile }}.list.chroot"
+          find config -maxdepth 4 -type f -print
 
-      - name: Verify generated ISO and checksum
+      - name: Build Debian ISO
         shell: bash
         run: |
-          set -Eeuo pipefail
-          image="dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
-          checksum="${image}.sha256"
-          test -s "$image"
-          test -s "$checksum"
-          (cd dist && sha256sum -c "$(basename "$checksum")")
+          set -ex
+          sudo rm -rf "build/${{ matrix.arch }}-${{ matrix.profile }}"
+          sudo mkdir -p dist
+          sudo rm -f "dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
+          sudo rm -f "dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256"
+          sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
+          sudo chown -R "$USER:$USER" dist
+          test -s "dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
+          test -s "dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256"
+
+      - name: Verify ISO checksum
+        shell: bash
+        run: |
+          set -ex
+          cd dist
+          sha256sum -c "AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256"
+          file "AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
+          ls -lh "AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
@@ -94,32 +136,68 @@ jobs:
             dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256
 
   release:
-    name: Publish AgOS GitHub Release
+    name: Publish AgOS release
     needs: build
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+
     steps:
-      - name: Download all build artifacts
+      - name: Clean release runner
+        shell: bash
+        run: |
+          set -ex
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo apt-get clean
+          df -h
+
+      - name: Install release utilities
+        shell: bash
+        run: |
+          set -ex
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates file
+
+      - name: Download ISO artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: AgOS-*
-          path: release-assets
+          path: downloaded-artifacts
           merge-multiple: true
 
-      - name: Verify release assets
+      - name: Prepare release files
         shell: bash
         run: |
-          set -Eeuo pipefail
-          test "$(find release-assets -maxdepth 1 -type f -name '*.iso' | wc -l)" -eq 4
-          test "$(find release-assets -maxdepth 1 -type f -name '*.iso.sha256' | wc -l)" -eq 4
+          set -ex
+          find downloaded-artifacts -type f -name '*.iso' -exec cp {} . \;
+          find downloaded-artifacts -type f -name '*.sha256' -exec cp {} . \;
+          test "$(find . -maxdepth 1 -type f -name '*.iso' | wc -l)" -eq 4
+          test "$(find . -maxdepth 1 -type f -name '*.sha256' | wc -l)" -eq 4
+          ls -lh && file *.iso
 
-      - name: Create release and upload files
+      - name: Verify release ISO files
+        shell: bash
+        run: |
+          set -ex
+          ls -lh && file *.iso
+          sha256sum -c ./AgOS-lite-amd64.iso.sha256
+          sha256sum -c ./AgOS-full-amd64.iso.sha256
+          sha256sum -c ./AgOS-lite-arm64.iso.sha256
+          sha256sum -c ./AgOS-full-arm64.iso.sha256
+
+      - name: Create GitHub release and upload ISO files
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: AgOS ${{ inputs.tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
+          draft: false
+          prerelease: false
           generate_release_notes: true
-          files: release-assets/*
+          files: ./*.iso
