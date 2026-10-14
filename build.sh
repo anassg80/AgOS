@@ -28,6 +28,7 @@ if [[ "$ARCH" == "arm64" ]]; then
 fi
 
 lb config \
+  --mode debian \
   --distribution bookworm \
   --binary-images "$BINARY_IMAGES" \
   --architectures "$ARCH" \
