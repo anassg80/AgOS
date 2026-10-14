@@ -8,6 +8,11 @@ on:
         required: true
         type: string
         default: v0.1.8
+      artifact_run_id:
+        description: "Existing Actions run ID with four ISO artifacts (leave empty to rebuild)"
+        required: false
+        type: string
+        default: ""
   push:
     tags:
       - "v*"
@@ -23,6 +28,7 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.profile }}-${{ matrix.arch }}
+    if: ${{ inputs.artifact_run_id == '' }}
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 240
     permissions:
@@ -122,8 +128,10 @@ jobs:
   release:
     name: Publish AgOS release
     needs: build
+    if: ${{ always() && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.artifact_run_id != '')) }}
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
 
     steps:
@@ -153,6 +161,8 @@ jobs:
           pattern: AgOS-*
           path: downloaded-artifacts
           merge-multiple: true
+          run-id: ${{ inputs.artifact_run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare release files
         shell: bash
@@ -160,6 +170,10 @@ jobs:
           set -ex
           find downloaded-artifacts -type f -name '*.iso' -exec cp {} . \;
           find downloaded-artifacts -type f -name '*.sha256' -exec cp {} . \;
+          for checksum in ./*.iso.sha256; do
+            sed -E 's#  .*/(AgOS-[^/]+\.iso)$#  \1#' "$checksum" > "$checksum.tmp"
+            mv "$checksum.tmp" "$checksum"
+          done
           test "$(find . -maxdepth 1 -type f -name '*.iso' | wc -l)" -eq 4
           test "$(find . -maxdepth 1 -type f -name '*.sha256' | wc -l)" -eq 4
           ls -lh && file *.iso
