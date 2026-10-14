@@ -24,8 +24,6 @@ jobs:
   build:
     name: Build ${{ matrix.profile }}-${{ matrix.arch }}
     runs-on: ubuntu-24.04
-    container:
-      image: node:22-bookworm
     timeout-minutes: 240
     permissions:
       contents: read
@@ -43,12 +41,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Enable ARM64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: Install Debian ISO build dependencies
         shell: bash
         run: |
           set -ex
-          apt-get update
-          apt-get install -y \
+          sudo apt-get update
+          sudo apt-get install -y \
             bash \
             binfmt-support \
             ca-certificates \
@@ -69,7 +72,7 @@ jobs:
             syslinux-common \
             syslinux-utils \
             xorriso
-          update-binfmts --enable || true
+          sudo update-binfmts --enable || true
           command -v debootstrap
           command -v lb
           command -v mksquashfs
@@ -92,11 +95,12 @@ jobs:
         shell: bash
         run: |
           set -ex
-          rm -rf "build/${{ matrix.arch }}-${{ matrix.profile }}"
-          mkdir -p dist
-          rm -f "dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
-          rm -f "dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256"
-          ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
+          sudo rm -rf "build/${{ matrix.arch }}-${{ matrix.profile }}"
+          sudo mkdir -p dist
+          sudo rm -f "dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
+          sudo rm -f "dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256"
+          sudo ./build.sh "${{ matrix.arch }}" "${{ matrix.profile }}"
+          sudo chown -R "$USER:$USER" dist
           test -s "dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso"
           test -s "dist/AgOS-${{ matrix.profile }}-${{ matrix.arch }}.iso.sha256"
 
