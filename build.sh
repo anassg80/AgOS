@@ -31,6 +31,8 @@ lb config \
   --distribution bookworm \
   --binary-images "$BINARY_IMAGES" \
   --architectures "$ARCH" \
+  --linux-packages linux-image \
+  --linux-flavours "$ARCH" \
   --debian-installer live \
   --archive-areas "main contrib non-free non-free-firmware" \
   --keyring-packages debian-archive-keyring \
