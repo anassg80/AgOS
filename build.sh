@@ -22,9 +22,6 @@ BINARY_IMAGES="iso-hybrid"
 LB_EXTRA=()
 if [[ "$ARCH" == "arm64" ]]; then
   BINARY_IMAGES="iso"
-  QEMU_STATIC=/usr/bin/qemu-aarch64-static
-  [[ -x "$QEMU_STATIC" ]] || { echo "QEMU ARM64 manquant" >&2; exit 1; }
-  LB_EXTRA+=(--bootstrap-qemu-arch arm64 --bootstrap-qemu-static "$QEMU_STATIC")
 fi
 
 lb config \
