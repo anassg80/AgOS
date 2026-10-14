@@ -58,6 +58,7 @@ jobs:
             cpio \
             curl \
             debootstrap \
+            debian-archive-keyring \
             dosfstools \
             file \
             git \
