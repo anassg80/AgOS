@@ -23,7 +23,7 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.profile }}-${{ matrix.arch }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 240
     permissions:
       contents: read
@@ -41,11 +41,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Enable ARM64 emulation
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - name: Install Debian ISO build dependencies
         shell: bash
         run: |
@@ -53,7 +48,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             bash \
-            binfmt-support \
             ca-certificates \
             cpio \
             curl \
@@ -66,7 +60,6 @@ jobs:
             grub-pc-bin \
             isolinux \
             mtools \
-            qemu-user-static \
             rsync \
             squashfs-tools \
             syslinux \
@@ -78,12 +71,10 @@ jobs:
           echo "58e09779881cbcc631c49ceb703413e0247a87db01823e597b2a1c40a2afd8f4  $LIVE_BUILD_DEB" | sha256sum --check
           sudo dpkg -i "$LIVE_BUILD_DEB"
           lb --version
-          sudo update-binfmts --enable || true
           command -v debootstrap
           command -v lb
           command -v mksquashfs
           command -v xorriso
-          command -v qemu-aarch64-static
           command -v file
 
       - name: Validate repository configuration
