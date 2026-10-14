@@ -55,6 +55,7 @@ jobs:
             bash \
             binfmt-support \
             ca-certificates \
+            cpio \
             curl \
             debootstrap \
             dosfstools \
@@ -63,7 +64,6 @@ jobs:
             grub-efi-amd64-bin \
             grub-pc-bin \
             isolinux \
-            live-build \
             mtools \
             qemu-user-static \
             rsync \
@@ -72,6 +72,11 @@ jobs:
             syslinux-common \
             syslinux-utils \
             xorriso
+          LIVE_BUILD_DEB=/tmp/live-build_20250505+deb13u1_all.deb
+          curl -fsSLo "$LIVE_BUILD_DEB" https://deb.debian.org/debian/pool/main/l/live-build/live-build_20250505+deb13u1_all.deb
+          echo "58e09779881cbcc631c49ceb703413e0247a87db01823e597b2a1c40a2afd8f4  $LIVE_BUILD_DEB" | sha256sum --check
+          sudo dpkg -i "$LIVE_BUILD_DEB"
+          lb --version
           sudo update-binfmts --enable || true
           command -v debootstrap
           command -v lb
